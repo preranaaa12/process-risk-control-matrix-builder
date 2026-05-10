@@ -7,6 +7,8 @@ from flask import Flask, jsonify, g, request
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from routes.describe import describe_bp
+from routes.recommend import recommend_bp
+from routes.generate_report import generate_report_bp
 
 from utils.security import contains_prompt_injection, sanitize_payload
 
@@ -46,6 +48,10 @@ def create_app():
                 }), 400
 
             g.cleaned_json = cleaned_payload
+
+    app.register_blueprint(describe_bp)
+    app.register_blueprint(recommend_bp)
+    app.register_blueprint(generate_report_bp)
 
     @app.get("/health")
     def health():

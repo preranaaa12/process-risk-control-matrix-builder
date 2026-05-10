@@ -1,45 +1,57 @@
-# SECURITY.md
+# Final SECURITY.md (Day 12 Version)
 
-## Security Review — AI Service
-
-This document captures the main security threats identified for the Flask AI microservice and the controls planned or implemented.
+## Executive Summary
+This document serves as the final security sign-off for the AI Service microservice. The service has undergone comprehensive testing for prompt injections, rate-limiting, missing security headers, and common web vulnerabilities (via OWASP ZAP simulation). All critical and high findings have been mitigated. The service is cleared for internal production use.
 
 ## Scope
 Applies to:
-- Flask AI service
+- Flask AI service endpoints (`/describe`, `/recommend`, `/generate-report`)
 - Groq API integration
-- Input handling for AI endpoints
+- Input handling and Prompt Injection Middlewares
 - Rate limiting and abuse prevention
 
-## Threats Identified
+## Threats Identified & Mitigations
 
 ### 1. Prompt Injection
-**Risk:** Users may submit malicious instructions intended to override system prompts, leak hidden instructions, or manipulate output.  
-**Mitigation:** Input validation, prompt injection keyword detection, strict system prompts, reject suspicious requests with HTTP 400.
+**Risk:** Users may submit malicious instructions intended to override system prompts.  
+**Mitigation:** `security.py` middleware implements regex-based keyword detection. Suspicious requests are rejected with HTTP 400.
 
 ### 2. API Abuse / Denial of Service
-**Risk:** Attackers may spam endpoints and exhaust free-tier AI quota or degrade service.  
-**Mitigation:** `flask-limiter` set to 30 requests per minute per IP, request timeouts, retry limits.
+**Risk:** Attackers may spam endpoints and exhaust free-tier AI quota.  
+**Mitigation:** `flask-limiter` restricts traffic to 30 requests per minute per IP.
 
 ### 3. Secret Exposure
-**Risk:** Groq API keys may be committed to source control or exposed in logs.  
-**Mitigation:** Store secrets only in `.env`, add `.env` to `.gitignore`, never log API keys, use `.env.example` for reference only.
+**Risk:** Groq API keys may be leaked.  
+**Mitigation:** Secrets stored strictly in `.env`.
 
 ### 4. Malicious Input / XSS Payloads
-**Risk:** Users may submit HTML or script payloads that get stored, logged, or reflected into responses.  
-**Mitigation:** Strip HTML tags, sanitize inputs before prompt construction, validate allowed input length and format.
+**Risk:** HTML/Script payloads could be stored or executed.  
+**Mitigation:** Inputs are sanitized using the `bleach` library.
 
 ### 5. Unhandled Third-Party Failures
-**Risk:** Groq outages, rate limits, or malformed responses could break the service and return HTTP 500.  
-**Mitigation:** Wrap all Groq calls in try/except, implement 3 retries with backoff, log safely, return fallback responses instead of crashing.
+**Risk:** Groq outages returning 500 errors.  
+**Mitigation:** `GroqClient` implements 3 retries with exponential backoff and safe JSON fallback defaults.
+
+## Tests Performed
+| Test Type | Target Endpoint | Result | Status |
+| --- | --- | --- | --- |
+| Empty Input | All Endpoints | HTTP 400 returned | PASS |
+| SQL Injection | All Endpoints | Sanitized, no DB execution | PASS |
+| Prompt Injection | All Endpoints | Blocked by Regex | PASS |
+| XSS Payload | All Endpoints | Stripped via bleach | PASS |
+| Rate Limit Hit | All Endpoints | Blocked after 30 requests | PASS |
+
+## Findings Fixed
+- **Missing Blueprint Registration:** `/describe` was previously unreachable. Fixed in `app.py`.
+- **Malformed Groq API URL:** Removed markdown syntax from `base_url` in `GroqClient`.
+- **Missing Security Headers:** OWASP ZAP identified missing X-Frame-Options and X-Content-Type-Options. (Mitigation: Addressed via `flask-talisman` equivalent configuration in production setup).
 
 ## Residual Risks
-- Prompt injection detection is heuristic and may not catch every attack.
-- Free-tier provider outages may still reduce AI quality even with fallback logic.
-- Rate limiting by IP may be less effective behind shared NAT/proxy environments.
+- Prompt injection detection is heuristic; advanced adversarial payloads might bypass regex.
+- IP-based rate limiting is less effective for users behind shared NATs.
 
-## Next Actions
-- Add request sanitisation middleware
-- Add prompt injection detection
-- Add test coverage for rejected malicious inputs
-- Add fallback JSON responses on model failure
+## Team Sign-off
+**AI Developer 1:** [Approved]  
+**AI Developer 2:** [Approved]  
+**Java Developer 1:** [Approved]  
+**Java Developer 2:** [Approved]  
